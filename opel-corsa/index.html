@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="pt">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Corsa 3D</title>
+<style>
+  :root { --bg:#e9edf2; --panel:rgba(255,255,255,.85); --text:#1c2430; --muted:#5b6675; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg:#12161c; --panel:rgba(28,34,44,.85); --text:#e8edf3; --muted:#9aa6b5; }
+  }
+  :root[data-theme="dark"] { --bg:#12161c; --panel:rgba(28,34,44,.85); --text:#e8edf3; --muted:#9aa6b5; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; overflow:hidden; }
+  canvas { display:block; }
+  #ui { position:fixed; left:16px; right:16px; bottom:16px; display:flex; flex-wrap:wrap; gap:10px;
+    align-items:center; justify-content:center; pointer-events:none; }
+  .card { pointer-events:auto; background:var(--panel); backdrop-filter:blur(8px); border-radius:14px;
+    padding:10px 14px; display:flex; gap:8px; align-items:center; box-shadow:0 4px 20px rgba(0,0,0,.12); }
+  .swatch { width:26px; height:26px; border-radius:50%; border:2px solid transparent; cursor:pointer; padding:0; }
+  .swatch.active { border-color:var(--text); }
+  button.t { border:0; border-radius:10px; padding:7px 12px; background:rgba(127,127,127,.18);
+    color:var(--text); font:inherit; font-size:14px; cursor:pointer; }
+  button.t.on { background:#f2b705; color:#1c2430; }
+  h1 { position:fixed; top:16px; left:16px; margin:0; font-size:18px; font-weight:650; }
+  h1 small { display:block; font-weight:400; font-size:13px; color:var(--muted); margin-top:2px; }
+</style>
+</head>
+<body>
+<h1>Corsa 3D <small>Modelado só com código · arraste para rodar, scroll para zoom</small></h1>
+<div id="ui">
+  <div class="card" id="colors"></div>
+  <div class="card">
+    <button class="t on" id="rot">Rodar</button>
+    <button class="t" id="lights">Faróis</button>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- Cena ----------
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const dark = matchMedia('(prefers-color-scheme: dark)').matches;
+scene.background = new THREE.Color(dark ? 0x12161c : 0xe9edf2);
+scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+
+const camera = new THREE.PerspectiveCamera(35, innerWidth / innerHeight, 0.1, 100);
+camera.position.set(6.2, 2.6, 6.2);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 0.6, 0);
+controls.enableDamping = true;
+controls.maxPolarAngle = Math.PI / 2 - 0.03;
+controls.minDistance = 3.5; controls.maxDistance = 16;
+controls.autoRotate = true; controls.autoRotateSpeed = 1.2;
+
+const sun = new THREE.DirectionalLight(0xffffff, 2.2);
+sun.position.set(5, 9, 4);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -5, right: 5, top: 5, bottom: -5 });
+scene.add(sun, new THREE.HemisphereLight(0xffffff, 0x444444, 0.6));
+
+const ground = new THREE.Mesh(new THREE.CircleGeometry(12, 64),
+  new THREE.MeshStandardMaterial({ color: dark ? 0x1d232c : 0xd6dce4, roughness: 0.95 }));
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// ---------- Materiais ----------
+const paint  = new THREE.MeshPhysicalMaterial({ color: 0xc8102e, metalness: 0.5, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.05 });
+const glass  = new THREE.MeshPhysicalMaterial({ color: 0x0d141c, metalness: 0.2, roughness: 0.05, transparent: true, opacity: 0.88 });
+const black  = new THREE.MeshStandardMaterial({ color: 0x15181c, roughness: 0.6 });
+const rubber = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.9 });
+const alloy  = new THREE.MeshStandardMaterial({ color: 0xc9cdd2, metalness: 0.9, roughness: 0.25 });
+const chrome = new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 1, roughness: 0.08 });
+const headMat = new THREE.MeshStandardMaterial({ color: 0xdde6f0, emissive: 0x000000, metalness: 0.3, roughness: 0.1 });
+const tailMat = new THREE.MeshStandardMaterial({ color: 0x8a0010, emissive: 0x300000, roughness: 0.2 });
+
+const car = new THREE.Group();
+scene.add(car);
+
+// Dimensões aproximadas (metros): 4.06 C × 1.77 L × 1.43 A
+const W = 1.77, WHEEL_X = 1.28, WHEEL_R = 0.31, ARCH_R = 0.41, AXLE_Y = 0.31;
+
+// Afina o carro: tejadilho mais estreito (tumblehome) e cantos arredondados vistos de cima
+function shapeCar(geo) {
+  const p = geo.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i);
+    let z = p.getZ(i);
+    z *= 1 - 0.22 * Math.max(0, y - 0.95);                       // tumblehome
+    const e = Math.max(0, Math.abs(x) - 1.45) / 0.6;              // pontas arredondadas
+    z *= 1 - 0.13 * e * e;
+    p.setZ(i, z);
+  }
+  geo.computeVertexNormals();
+  return geo;
+}
+function extrude(shape, depth, bevel = 0.06) {
+  const g = new THREE.ExtrudeGeometry(shape, {
+    depth, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 5, curveSegments: 32 });
+  g.translate(0, 0, -depth / 2);
+  return g;
+}
+
+// ---------- Carroçaria (perfil lateral extrudido) ----------
+const s = new THREE.Shape();
+s.moveTo(-1.93, 0.30);
+s.lineTo(-WHEEL_X - ARCH_R, 0.30);
+s.absarc(-WHEEL_X, AXLE_Y, ARCH_R, Math.PI, 0, true);           // cava traseira
+s.lineTo(WHEEL_X - ARCH_R, 0.30);
+s.absarc(WHEEL_X, AXLE_Y, ARCH_R, Math.PI, 0, true);            // cava dianteira
+s.lineTo(1.90, 0.30);
+s.quadraticCurveTo(2.02, 0.32, 2.02, 0.50);                     // para-choques
+s.quadraticCurveTo(2.02, 0.74, 1.85, 0.80);                     // frente
+s.quadraticCurveTo(1.30, 0.93, 0.80, 0.97);                     // capô
+s.lineTo(0.02, 1.37);                                            // para-brisas
+s.quadraticCurveTo(-0.10, 1.42, -0.30, 1.42);
+s.lineTo(-1.25, 1.40);                                           // tejadilho
+s.quadraticCurveTo(-1.62, 1.39, -1.80, 1.12);                    // spoiler / óculo
+s.lineTo(-1.95, 0.88);
+s.quadraticCurveTo(-2.02, 0.80, -2.02, 0.55);                    // traseira
+s.quadraticCurveTo(-2.02, 0.31, -1.93, 0.30);
+const body = new THREE.Mesh(shapeCar(extrude(s, W - 0.12)), paint);
+body.castShadow = true;
+car.add(body);
+
+// ---------- Vidros ----------
+// Laterais (ligeiramente mais largos que a carroçaria → ficam à superfície)
+const sideGlass = new THREE.Shape();
+sideGlass.moveTo(0.70, 1.00);
+sideGlass.lineTo(0.06, 1.33);
+sideGlass.quadraticCurveTo(-0.05, 1.37, -0.25, 1.37);
+sideGlass.lineTo(-1.22, 1.36);
+sideGlass.quadraticCurveTo(-1.50, 1.33, -1.66, 1.04);
+sideGlass.lineTo(0.70, 1.00);
+car.add(new THREE.Mesh(shapeCar(extrude(sideGlass, W - 0.02, 0.03)), glass));
+
+// Pilar B (tira preta entre os vidros)
+const bPillar = new THREE.Mesh(shapeCar(new THREE.BoxGeometry(0.07, 0.36, W + 0.08)), black);
+bPillar.position.set(-0.45, 1.18, 0);
+car.add(bPillar);
+
+// Para-brisas e óculo traseiro (por cima da superfície)
+function slabGlass(x1, y1, x2, y2, width, off = 0.075) {
+  const len = Math.hypot(x2 - x1, y2 - y1);
+  const g = new THREE.BoxGeometry(len, 0.02, width);
+  const m = new THREE.Mesh(g, glass);
+  // afastar da superfície (o bevel da extrusão aumenta o contorno ~6 cm)
+  const nx = (y2 - y1) / len, ny = -(x2 - x1) / len;
+  m.position.set((x1 + x2) / 2 + nx * off, (y1 + y2) / 2 + ny * off, 0);
+  m.rotation.z = Math.atan2(y2 - y1, x2 - x1);
+  return m;
+}
+const ws = slabGlass(0.74, 1.03, 0.08, 1.38, 1.26); car.add(ws);
+const rw = slabGlass(-1.48, 1.37, -1.80, 1.10, 1.12, 0.10); car.add(rw);
+
+// ---------- Faróis ----------
+for (const side of [-1, 1]) {
+  // dianteiros: alongados e inclinados para trás
+  const hl = new THREE.Mesh(new THREE.CapsuleGeometry(0.07, 0.30, 6, 16), headMat);
+  hl.rotation.order = 'YXZ';
+  hl.rotation.set(Math.PI / 2, -side * 0.55, 0);
+  hl.position.set(1.99, 0.77, side * 0.56);
+  car.add(hl);
+  // assinatura LED
+  const drl = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.02, 0.26), headMat);
+  drl.position.set(2.05, 0.70, side * 0.50);
+  drl.rotation.y = -side * 0.55;
+  car.add(drl);
+
+  // traseiros
+  const tl = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.13, 0.32), tailMat);
+  tl.position.set(-2.06, 0.88, side * 0.60);
+  tl.rotation.y = side * 0.35;
+  car.add(tl);
+
+  // espelhos
+  const mirror = new THREE.Mesh(new THREE.SphereGeometry(0.1, 20, 12), paint);
+  mirror.scale.set(0.9, 0.7, 1.3);
+  mirror.position.set(0.55, 1.05, side * 0.96);
+  mirror.castShadow = true;
+  car.add(mirror);
+  const arm = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.05, 0.1), black);
+  arm.position.set(0.58, 1.02, side * 0.88);
+  car.add(arm);
+
+  // puxadores das portas
+  for (const x of [0.05, -0.95]) {
+    const h = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.03, 0.02), chrome);
+    h.position.set(x, 0.92, side * 0.885);
+    car.add(h);
+  }
+  // linhas das portas
+  for (const x of [0.66, -0.47, -1.40]) {
+    const l = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.55, 0.01), black);
+    l.position.set(x, 0.73, side * 0.884);
+    car.add(l);
+  }
+  // embaladeira preta
+  const sill = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.08, 0.04), black);
+  sill.position.set(0, 0.32, side * 0.885);
+  car.add(sill);
+}
+
+// Grelha e entrada de ar
+const grille = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.10, 0.85), black);
+grille.position.set(2.07, 0.64, 0); car.add(grille);
+const intake = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.14, 1.1), black);
+intake.position.set(2.09, 0.42, 0); car.add(intake);
+// Barra cromada genérica na grelha (sem logótipos)
+const bar = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.012, 0.6), chrome);
+bar.position.set(2.095, 0.64, 0); car.add(bar);
+// Difusor e matrícula traseira
+const diff = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.12, 1.3), black);
+diff.position.set(-2.08, 0.38, 0); car.add(diff);
+const plateMat = new THREE.MeshStandardMaterial({ color: 0xf4f4f4, roughness: 0.4 });
+const plateR = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.11, 0.52), plateMat);
+plateR.position.set(-2.085, 0.62, 0); car.add(plateR);
+const plateF = plateR.clone(); plateF.position.set(2.11, 0.42, 0); car.add(plateF);
+// Antena barbatana
+const fin = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.16, 12), black);
+fin.scale.set(2.2, 0.6, 0.6); fin.rotation.z = Math.PI / 2;
+fin.position.set(-1.15, 1.49, 0); car.add(fin);
+
+// ---------- Rodas ----------
+function wheel() {
+  const g = new THREE.Group();
+  const tire = new THREE.Mesh(new THREE.TorusGeometry(WHEEL_R - 0.07, 0.085, 20, 48), rubber);
+  tire.scale.z = 1.25;
+  const rim = new THREE.Mesh(new THREE.CylinderGeometry(WHEEL_R - 0.11, WHEEL_R - 0.11, 0.17, 40), alloy);
+  rim.rotation.x = Math.PI / 2;
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.2, 20), black);
+  hub.rotation.x = Math.PI / 2;
+  g.add(tire, rim, hub);
+  // jante com 5 raios duplos
+  for (let i = 0; i < 5; i++) {
+    for (const off of [-0.12, 0.12]) {
+      const sp = new THREE.Mesh(new THREE.BoxGeometry(0.03, WHEEL_R - 0.14, 0.02), alloy);
+      const a = (i / 5) * Math.PI * 2 + off;
+      sp.position.set(Math.sin(a) * 0.1, Math.cos(a) * 0.1, 0.095);
+      sp.rotation.z = -a;
+      g.add(sp);
+    }
+  }
+  const dish = new THREE.Mesh(new THREE.CylinderGeometry(WHEEL_R - 0.115, WHEEL_R - 0.115, 0.01, 40), black);
+  dish.rotation.x = Math.PI / 2; dish.position.z = 0.087;
+  g.add(dish);
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  return g;
+}
+const wheels = [];
+for (const x of [WHEEL_X, -WHEEL_X]) for (const side of [-1, 1]) {
+  const w = wheel();
+  w.position.set(x, AXLE_Y, side * 0.74);
+  if (side < 0) w.rotation.y = Math.PI;      // raios virados para fora
+  car.add(w); wheels.push(w);
+}
+// Fundo escuro dentro das cavas
+for (const x of [WHEEL_X, -WHEEL_X]) {
+  const well = new THREE.Mesh(new THREE.CylinderGeometry(ARCH_R - 0.01, ARCH_R - 0.01, W - 0.3, 32, 1, true, -Math.PI / 2, Math.PI), black);
+  well.rotation.x = Math.PI / 2; well.position.set(x, AXLE_Y, 0);
+  well.material = black.clone(); well.material.side = THREE.BackSide;
+  car.add(well);
+}
+
+// Luzes reais dos faróis (ligáveis)
+const beams = [];
+for (const side of [-1, 1]) {
+  const sl = new THREE.SpotLight(0xfff4e0, 0, 12, 0.45, 0.6);
+  sl.position.set(2.05, 0.75, side * 0.55);
+  sl.target.position.set(6, 0, side * 0.8);
+  car.add(sl, sl.target); beams.push(sl);
+}
+
+// ---------- UI ----------
+const colors = { 'Vermelho': 0xc8102e, 'Amarelo': 0xf2b705, 'Azul': 0x1f4fa3, 'Branco': 0xf1f3f5, 'Cinza': 0x5f666e, 'Preto': 0x111317 };
+const box = document.getElementById('colors');
+Object.entries(colors).forEach(([name, hex], i) => {
+  const b = document.createElement('button');
+  b.className = 'swatch' + (i === 0 ? ' active' : '');
+  b.title = name; b.setAttribute('aria-label', name);
+  b.style.background = '#' + hex.toString(16).padStart(6, '0');
+  b.onclick = () => {
+    paint.color.setHex(hex);
+    box.querySelectorAll('.swatch').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+  };
+  box.appendChild(b);
+});
+const rotBtn = document.getElementById('rot');
+rotBtn.onclick = () => { controls.autoRotate = !controls.autoRotate; rotBtn.classList.toggle('on', controls.autoRotate); };
+const lBtn = document.getElementById('lights');
+let lightsOn = false;
+lBtn.onclick = () => {
+  lightsOn = !lightsOn; lBtn.classList.toggle('on', lightsOn);
+  headMat.emissive.setHex(lightsOn ? 0xfff6d8 : 0x000000);
+  headMat.emissiveIntensity = lightsOn ? 2 : 0;
+  tailMat.emissive.setHex(lightsOn ? 0xff1020 : 0x300000);
+  beams.forEach(b => b.intensity = lightsOn ? 40 : 0);
+};
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
+window.__ready = true;
+</script>
+</body>
+</html>
