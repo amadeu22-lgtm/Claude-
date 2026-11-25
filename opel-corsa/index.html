@@ -133,9 +133,9 @@ s.quadraticCurveTo(2.02, 0.74, 1.85, 0.80);                     // frente
 s.quadraticCurveTo(1.30, 0.93, 0.80, 0.97);                     // capô
 s.lineTo(0.02, 1.37);                                            // para-brisas
 s.quadraticCurveTo(-0.10, 1.42, -0.30, 1.42);
-s.lineTo(-1.25, 1.40);                                           // tejadilho
-s.quadraticCurveTo(-1.62, 1.39, -1.80, 1.12);                    // spoiler / óculo
-s.lineTo(-1.95, 0.88);
+s.quadraticCurveTo(-0.90, 1.42, -1.35, 1.37);                    // tejadilho a descer
+s.quadraticCurveTo(-1.56, 1.35, -1.63, 1.27);                    // spoiler
+s.lineTo(-1.93, 0.92);                                           // óculo inclinado
 s.quadraticCurveTo(-2.02, 0.80, -2.02, 0.55);                    // traseira
 s.quadraticCurveTo(-2.02, 0.31, -1.93, 0.30);
 const body = new THREE.Mesh(shapeCar(extrude(s, W - 0.12)), paint);
@@ -148,8 +148,8 @@ const sideGlass = new THREE.Shape();
 sideGlass.moveTo(0.70, 1.00);
 sideGlass.lineTo(0.06, 1.33);
 sideGlass.quadraticCurveTo(-0.05, 1.37, -0.25, 1.37);
-sideGlass.lineTo(-1.22, 1.36);
-sideGlass.quadraticCurveTo(-1.50, 1.33, -1.66, 1.04);
+sideGlass.quadraticCurveTo(-0.85, 1.37, -1.25, 1.32);
+sideGlass.quadraticCurveTo(-1.45, 1.28, -1.52, 1.08);
 sideGlass.lineTo(0.70, 1.00);
 car.add(new THREE.Mesh(shapeCar(extrude(sideGlass, W - 0.02, 0.03)), glass));
 
@@ -170,7 +170,7 @@ function slabGlass(x1, y1, x2, y2, width, off = 0.075) {
   return m;
 }
 const ws = slabGlass(0.74, 1.03, 0.08, 1.38, 1.26); car.add(ws);
-const rw = slabGlass(-1.48, 1.37, -1.80, 1.10, 1.12, 0.10); car.add(rw);
+const rw = slabGlass(-1.62, 1.25, -1.90, 0.97, 1.10, 0.08); car.add(rw);
 
 // ---------- Faróis ----------
 for (const side of [-1, 1]) {
